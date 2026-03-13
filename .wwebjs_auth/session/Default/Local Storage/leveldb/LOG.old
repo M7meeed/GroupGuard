@@ -1,6 +1,3 @@
-2026/03/13-21:14:28.077 3df21a Reusing MANIFEST /Users/mhmdabrahym/Desktop/GroupGuard/.wwebjs_auth/session/Default/Local Storage/leveldb/MANIFEST-000001
-2026/03/13-21:14:28.080 3df21a Recovering log #3
-2026/03/13-21:14:28.080 3df21a Reusing old log /Users/mhmdabrahym/Desktop/GroupGuard/.wwebjs_auth/session/Default/Local Storage/leveldb/000003.log 
-2026/03/13-22:38:57.817 3df21d Level-0 table #5: started
-2026/03/13-22:38:57.821 3df21d Level-0 table #5: 16724 bytes OK
-2026/03/13-22:38:57.825 3df21d Delete type=0 #3
+2026/03/14-02:12:31.538 3f02df Reusing MANIFEST /Users/mhmdabrahym/Desktop/GroupGuard/.wwebjs_auth/session/Default/Local Storage/leveldb/MANIFEST-000001
+2026/03/14-02:12:31.542 3f02df Recovering log #8
+2026/03/14-02:12:31.542 3f02df Reusing old log /Users/mhmdabrahym/Desktop/GroupGuard/.wwebjs_auth/session/Default/Local Storage/leveldb/000008.log 
