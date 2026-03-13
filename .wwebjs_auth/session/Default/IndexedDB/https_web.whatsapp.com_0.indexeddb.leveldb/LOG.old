@@ -1,0 +1,25 @@
+2026/03/13-21:14:28.670 3df1c9 Reusing MANIFEST /Users/mhmdabrahym/Desktop/GroupGuard/.wwebjs_auth/session/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/03/13-21:14:28.671 3df1c9 Recovering log #16
+2026/03/13-21:14:28.687 3df1c9 Reusing old log /Users/mhmdabrahym/Desktop/GroupGuard/.wwebjs_auth/session/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb/000016.log 
+2026/03/13-21:32:27.100 3df1cb Level-0 table #22: started
+2026/03/13-21:32:27.132 3df1cb Level-0 table #22: 1160007 bytes OK
+2026/03/13-21:32:27.135 3df1cb Delete type=0 #16
+2026/03/13-21:32:27.481 3df1cb Compacting 1@1 + 2@2 files
+2026/03/13-21:32:27.522 3df1cb Generated table #23@1: 43763 keys, 2192242 bytes
+2026/03/13-21:32:27.542 3df1cb Generated table #24@1: 41570 keys, 723598 bytes
+2026/03/13-21:32:27.542 3df1cb Compacted 1@1 + 2@2 files => 2915840 bytes
+2026/03/13-21:32:27.544 3df1cb compacted to: files[ 0 0 2 0 0 0 0 ]
+2026/03/13-21:32:27.545 3df1cb Delete type=2 #22
+2026/03/13-21:32:27.545 3df1cb Delete type=2 #19
+2026/03/13-21:32:27.545 3df1cb Delete type=2 #18
+2026/03/13-21:58:40.561 3df1cb Level-0 table #26: started
+2026/03/13-21:58:40.593 3df1cb Level-0 table #26: 1223908 bytes OK
+2026/03/13-21:58:40.597 3df1cb Delete type=0 #21
+2026/03/13-22:16:37.705 3df1cb Compacting 1@1 + 2@2 files
+2026/03/13-22:17:02.853 3df1cb Generated table #27@1: 36236 keys, 2185549 bytes
+2026/03/13-22:17:02.872 3df1cb Generated table #28@1: 55856 keys, 956548 bytes
+2026/03/13-22:17:02.872 3df1cb Compacted 1@1 + 2@2 files => 3142097 bytes
+2026/03/13-22:17:02.873 3df1cb compacted to: files[ 0 0 2 0 0 0 0 ]
+2026/03/13-22:17:02.874 3df1cb Delete type=2 #23
+2026/03/13-22:17:02.874 3df1cb Delete type=2 #26
+2026/03/13-22:17:02.874 3df1cb Delete type=2 #24
