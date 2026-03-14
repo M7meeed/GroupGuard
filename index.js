@@ -11,7 +11,11 @@ const client = new Client({
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
-            '--disable-gpu'
+            '--disable-gpu',
+            '--disable-extensions',
+            '--no-first-run',
+            '--no-default-browser-check',
+            '--single-process'
         ]
     }
 });
