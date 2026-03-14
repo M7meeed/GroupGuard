@@ -1,2 +1,0 @@
-[phases.setup]
-nixPkgs = ["nss", "freetype", "harfbuzz", "ca-certificates", "glib", "xorg.libX11", "xorg.libXcomposite", "xorg.libXcursor", "xorg.libXdamage", "xorg.libXext", "xorg.libXi", "xorg.libXtst", "cups", "libdrm", "xorg.libxcb", "xorg.libXScrnSaver", "xorg.libXrandr", "alsa-lib", "pango", "atk", "at-spi2-atk", "gtk3", "nspr"]
