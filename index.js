@@ -204,27 +204,32 @@ client.on('message_create', async (msg) => {
         const isAdmin = sender && (sender.isAdmin || sender.isSuperAdmin);
         if (!isAdmin) return;
 
-        // تحقق أن الرسالة فيها منشن للبوت
-        const botId = client.info.wid._serialized;
-        const mentions = await msg.getMentions();
-        const botMentioned = mentions.some(m => m.id._serialized === botId);
+        // تحقق أن الرسالة فيها منشن للبوت عن طريق mentionedIds
+        const botNumber = client.info.wid.user;
+        const msgData = msg.rawData || msg._data || {};
+        const mentionedIds = msgData.mentionedJidList || [];
+        const botMentioned = mentionedIds.some(id => id.includes(botNumber));
         if (!botMentioned) return;
 
         // تحقق أن الرسالة ردّ على رسالة شخص
         if (!msg.hasQuotedMsg) {
-            await chat.sendMessage('⚠️ منشنّ البوت كردّ على الرسالة المراد حذفها.');
+            await chat.sendMessage('⚠️ ردّ على الرسالة المراد حذفها ثم منشن البوت.');
             return;
         }
 
         const quotedMsg = await msg.getQuotedMessage();
         const targetId = quotedMsg.author || quotedMsg.from;
+
+        // لا تطرد البوت أو الأدمن نفسه
+        if (targetId === client.info.wid._serialized) return;
+
         const targetContact = await client.getContactById(targetId);
         const targetName = targetContact.pushname || targetId.replace('@c.us', '') || 'مجهول';
 
         // حذف الرسالة المنشن عليها
-        await quotedMsg.delete(true);
-        // حذف رسالة الأدمن أيضاً
-        await msg.delete(true);
+        try { await quotedMsg.delete(true); } catch {}
+        // حذف رسالة الأدمن
+        try { await msg.delete(true); } catch {}
 
         // رسالة خاصة للمطرود
         try {
