@@ -190,6 +190,62 @@ client.on('message_create', async (msg) => {
     }
 });
 
+// ===== طرد عن طريق المنشن =====
+client.on('message_create', async (msg) => {
+    try {
+        const chat = await msg.getChat();
+        if (!chat.isGroup || msg.fromMe) return;
+
+        // تحقق أن المرسل أدمن
+        const participants = chat.participants;
+        const sender = participants.find(p =>
+            p.id._serialized === msg.author || p.id._serialized === msg.from
+        );
+        const isAdmin = sender && (sender.isAdmin || sender.isSuperAdmin);
+        if (!isAdmin) return;
+
+        // تحقق أن الرسالة فيها منشن للبوت
+        const botId = client.info.wid._serialized;
+        const mentions = await msg.getMentions();
+        const botMentioned = mentions.some(m => m.id._serialized === botId);
+        if (!botMentioned) return;
+
+        // تحقق أن الرسالة ردّ على رسالة شخص
+        if (!msg.hasQuotedMsg) {
+            await chat.sendMessage('⚠️ منشنّ البوت كردّ على الرسالة المراد حذفها.');
+            return;
+        }
+
+        const quotedMsg = await msg.getQuotedMessage();
+        const targetId = quotedMsg.author || quotedMsg.from;
+        const targetContact = await client.getContactById(targetId);
+        const targetName = targetContact.pushname || targetId.replace('@c.us', '') || 'مجهول';
+
+        // حذف الرسالة المنشن عليها
+        await quotedMsg.delete(true);
+        // حذف رسالة الأدمن أيضاً
+        await msg.delete(true);
+
+        // رسالة خاصة للمطرود
+        try {
+            await client.sendMessage(targetId, config.messages.privateWarning);
+        } catch {}
+
+        // طرد العضو
+        await new Promise(r => setTimeout(r, 500));
+        try {
+            await chat.removeParticipants([targetId]);
+            await chat.sendMessage(`🚫 تم طرد *${targetName}* بقرار من الإدارة.`);
+            console.log(`✅ تم طرد ${targetName} بواسطة منشن الأدمن`);
+        } catch (err) {
+            console.error('❌ فشل الطرد بالمنشن:', err.message);
+        }
+
+    } catch (err) {
+        console.error('❌ خطأ في المنشن:', err.message);
+    }
+});
+
 // ===== أوامر الأدمن =====
 client.on('message_create', async (msg) => {
     try {
