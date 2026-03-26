@@ -78,13 +78,13 @@ function checkMessage(text) {
 }
 
 // ===== الدالة الرئيسية للطرد =====
-async function kickMember(chat, targetId, reason) {
+async function kickMember(chat, targetId, reason, groupMsg = config.messages.groupNotice) {
     try {
         await client.sendMessage(targetId, config.messages.privateWarning);
     } catch {}
     await new Promise(r => setTimeout(r, 500));
     await chat.removeParticipants([targetId]);
-    await chat.sendMessage(config.messages.groupNotice);
+    if (groupMsg) await chat.sendMessage(groupMsg);
     console.log(`✅ تم طرد ${targetId} | السبب: ${reason}`);
 }
 
@@ -94,13 +94,31 @@ client.on('group_join', async (notification) => {
         const chat = await notification.getChat();
         for (const id of notification.recipientIds) {
             if (id === client.info.wid._serialized) continue;
-            if (id.endsWith('@lid')) continue;
-            const number = id.replace('@c.us', '');
+
+            let number = '';
+
+            if (id.endsWith('@lid')) {
+                // صيغة @lid — نحاول نجيب الرقم من المشاركين
+                try {
+                    const contact = await client.getContactById(id);
+                    number = contact.number || '';
+                } catch {
+                    console.log(`⚠️ ما قدر يجيب رقم @lid: ${id}`);
+                    continue;
+                }
+            } else {
+                number = id.replace('@c.us', '');
+            }
+
+            if (!number) continue;
+
             const isAllowed = config.allowedCountryCodes.some(code => number.startsWith(code));
             if (!isAllowed) {
-                console.log(`🌍 طرد دولة غير مسموحة: ${number}`);
+                console.log(`🌍 طرد دولة غير مسموحة: ${number} (${id})`);
                 await chat.removeParticipants([id]);
-                await chat.sendMessage(config.messages.foreignKick);
+                await chat.sendMessage('🚫 تم طرد عضو غير مؤهل');
+            } else {
+                console.log(`✅ دولة مسموحة: ${number}`);
             }
         }
     } catch (err) {
@@ -168,8 +186,8 @@ client.on('message', async (msg) => {
             try { await quotedMsg.delete(true); } catch {}
             try { await msg.delete(true); } catch {}
 
-            await kickMember(chat, targetId, 'منشن الأدمن');
-            await chat.sendMessage(`🚫 تم طرد *${targetName}* بقرار من الإدارة.`);
+            await kickMember(chat, targetId, 'منشن الأدمن', null);
+            await chat.sendMessage(`🚫 تم طرد *${targetName}* من قبل الإدارة`);
             return;
         }
 
