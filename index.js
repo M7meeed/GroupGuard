@@ -204,11 +204,18 @@ client.on('message_create', async (msg) => {
         const isAdmin = sender && (sender.isAdmin || sender.isSuperAdmin);
         if (!isAdmin) return;
 
-        // تحقق أن الرسالة فيها منشن للبوت عن طريق mentionedIds
+        // تحقق أن الرسالة فيها منشن للبوت
         const botNumber = client.info.wid.user;
-        const msgData = msg.rawData || msg._data || {};
-        const mentionedIds = msgData.mentionedJidList || [];
-        const botMentioned = mentionedIds.some(id => id.includes(botNumber));
+        const msgBody = msg.body || '';
+
+        // فحص المنشن عن طريق النص أو mentionedIds
+        const mentionedIds = (msg._data && msg._data.mentionedJidList) || [];
+        const botMentionedInIds = mentionedIds.some(id => id.includes(botNumber));
+        const botMentionedInText = msgBody.includes('@' + botNumber.replace('966', '0').slice(0,10)) ||
+                                   msgBody.includes('@' + botNumber);
+        const botMentioned = botMentionedInIds || botMentionedInText ||
+                             (msg.mentionedIds && msg.mentionedIds.some(id => id.includes(botNumber)));
+
         if (!botMentioned) return;
 
         // تحقق أن الرسالة ردّ على رسالة شخص
