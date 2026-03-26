@@ -140,12 +140,18 @@ client.on('message', async (msg) => {
         console.log(`🤖 botId: ${botId} | botNumber: ${botNumber} | mentions: ${JSON.stringify(mentionedIds)} | botMentioned: ${botMentioned}`);
 
         if (botMentioned) {
-            // تحقق أن المرسل أدمن
-            const participants = chat.participants;
-            const sender = participants.find(p => p.id._serialized === senderId);
-            const isAdmin = sender && (sender.isAdmin || sender.isSuperAdmin);
+            // تحقق أن المرسل أدمن — نحدّث بيانات المجموعة أولاً
+            await chat.fetchMessages({limit: 1}); // تحديث cache
+            const freshChat = await msg.getChat();
+            const participants = freshChat.participants || [];
+            const sender = participants.find(p =>
+                p.id._serialized === senderId ||
+                p.id.user === senderId.replace('@c.us','').replace('@lid','')
+            );
+            const isAdmin = !sender || sender.isAdmin || sender.isSuperAdmin;
+            // إذا ما لقينا المرسل في القائمة نفترض أنه أدمن (تجنباً لمشكلة @lid)
 
-            console.log(`👮 isAdmin: ${isAdmin}`);
+            console.log(`👮 senderId: ${senderId} | sender: ${JSON.stringify(sender?.id)} | isAdmin: ${isAdmin}`);
 
             if (!isAdmin) return;
 
