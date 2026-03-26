@@ -141,9 +141,7 @@ client.on('message', async (msg) => {
 
         if (botMentioned) {
             // تحقق أن المرسل أدمن — نحدّث بيانات المجموعة أولاً
-            await chat.fetchMessages({limit: 1}); // تحديث cache
-            const freshChat = await msg.getChat();
-            const participants = freshChat.participants || [];
+            const participants = chat.participants || [];
             const sender = participants.find(p =>
                 p.id._serialized === senderId ||
                 p.id.user === senderId.replace('@c.us','').replace('@lid','')
