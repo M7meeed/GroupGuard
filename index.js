@@ -126,11 +126,18 @@ client.on('message', async (msg) => {
         console.log(`📨 رسالة | من: ${senderId} | نص: "${text.substring(0,50)}" | ردّ: ${msg.hasQuotedMsg}`);
 
         // ===== فحص المنشن =====
-        const botNumber = client.info.wid.user;
+        const botId = client.info.wid._serialized; // مثال: 249125058815@c.us
+        const botNumber = client.info.wid.user;     // مثال: 249125058815
         const mentionedIds = (msg._data && msg._data.mentionedJidList) || [];
-        const botMentioned = mentionedIds.some(id => id.includes(botNumber));
 
-        console.log(`🤖 botNumber: ${botNumber} | mentions: ${JSON.stringify(mentionedIds)} | botMentioned: ${botMentioned}`);
+        // نفحص إذا المنشن يحتوي رقم البوت بأي صيغة
+        const botMentioned = mentionedIds.length > 0 && (
+            mentionedIds.some(id => id.includes(botNumber)) ||
+            mentionedIds.some(id => id.replace('@lid','').replace('@c.us','') === botNumber) ||
+            mentionedIds.length === 1  // إذا في منشن واحد فقط في رسالة الأدمن نفترض أنه البوت
+        );
+
+        console.log(`🤖 botId: ${botId} | botNumber: ${botNumber} | mentions: ${JSON.stringify(mentionedIds)} | botMentioned: ${botMentioned}`);
 
         if (botMentioned) {
             // تحقق أن المرسل أدمن
