@@ -2,7 +2,42 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const qrcodeLib = require('qrcode');
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const config = require('./config');
+
+// ===== نظام الحفظ الدائم للبيانات =====
+const DATA_FILE = path.join(__dirname, 'data.json');
+
+function loadData() {
+    try {
+        if (fs.existsSync(DATA_FILE)) {
+            const raw = fs.readFileSync(DATA_FILE, 'utf8');
+            const data = JSON.parse(raw);
+            // دمج البيانات المحفوظة مع config
+            if (data.bannedWords) config.bannedWords = data.bannedWords;
+            if (data.allowedCountryCodes) config.allowedCountryCodes = data.allowedCountryCodes;
+            console.log(`📂 تم تحميل البيانات: ${config.bannedWords.length} كلمة، ${config.allowedCountryCodes.length} دولة`);
+        }
+    } catch (err) {
+        console.log('⚠️ فشل تحميل البيانات، يستخدم config الافتراضي:', err.message);
+    }
+}
+
+function saveData() {
+    try {
+        const data = {
+            bannedWords: config.bannedWords,
+            allowedCountryCodes: config.allowedCountryCodes
+        };
+        fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
+    } catch (err) {
+        console.log('⚠️ فشل حفظ البيانات:', err.message);
+    }
+}
+
+// تحميل البيانات عند البدء
+loadData();
 
 // ===== Web Server للـ QR Code =====
 let currentQR = null;
@@ -80,11 +115,9 @@ function checkMessage(text) {
 // ===== فحص إذا المرسل أدمن — يدعم @lid و @c.us =====
 function isGroupAdmin(chat, senderId) {
     const participants = chat.participants || [];
-    // استخرج الرقم فقط بدون النطاق
     const senderUser = senderId.replace('@c.us','').replace('@lid','').replace('@s.whatsapp.net','');
     for (const p of participants) {
         const pUser = p.id.user || '';
-        // مطابقة برقم المستخدم بدون النطاق
         if (pUser === senderUser) {
             return p.isAdmin || p.isSuperAdmin || false;
         }
@@ -153,28 +186,46 @@ client.on('message', async (msg) => {
                 const code = cmd.replace('!اضف دولة ','').trim();
                 if (code && !config.allowedCountryCodes.includes(code)) {
                     config.allowedCountryCodes.push(code);
+                    saveData(); // ✅ حفظ فوري
                     await chat.sendMessage(`✅ تمت إضافة الدولة: +${code}`);
+                } else {
+                    await chat.sendMessage(`⚠️ الكود موجود مسبقاً أو فارغ`);
                 }
             } else if (cmd.startsWith('!احذف دولة ')) {
                 const code = cmd.replace('!احذف دولة ','').trim();
                 const i = config.allowedCountryCodes.indexOf(code);
-                if (i > -1) { config.allowedCountryCodes.splice(i,1); await chat.sendMessage(`🗑️ تم حذف الدولة: +${code}`); }
-                else await chat.sendMessage(`⚠️ الكود غير موجود`);
+                if (i > -1) {
+                    config.allowedCountryCodes.splice(i, 1);
+                    saveData(); // ✅ حفظ فوري
+                    await chat.sendMessage(`🗑️ تم حذف الدولة: +${code}`);
+                } else {
+                    await chat.sendMessage(`⚠️ الكود غير موجود`);
+                }
             } else if (cmd === '!الدول') {
                 await chat.sendMessage(`🌍 *الدول المسموحة:*\n\n${config.allowedCountryCodes.map((c,i)=>`${i+1}. +${c}`).join('\n')}`);
             } else if (cmd.startsWith('!اضف ')) {
                 const word = cmd.replace('!اضف ','').trim();
                 if (word && !config.bannedWords.includes(word)) {
                     config.bannedWords.push(word);
+                    saveData(); // ✅ حفظ فوري
                     await chat.sendMessage(`✅ تمت إضافة الكلمة: "${word}"`);
+                } else {
+                    await chat.sendMessage(`⚠️ الكلمة موجودة مسبقاً أو فارغة`);
                 }
             } else if (cmd.startsWith('!احذف ')) {
                 const word = cmd.replace('!احذف ','').trim();
                 const i = config.bannedWords.indexOf(word);
-                if (i > -1) { config.bannedWords.splice(i,1); await chat.sendMessage(`🗑️ تم حذف الكلمة: "${word}"`); }
-                else await chat.sendMessage(`⚠️ الكلمة غير موجودة`);
+                if (i > -1) {
+                    config.bannedWords.splice(i, 1);
+                    saveData(); // ✅ حفظ فوري
+                    await chat.sendMessage(`🗑️ تم حذف الكلمة: "${word}"`);
+                } else {
+                    await chat.sendMessage(`⚠️ الكلمة غير موجودة`);
+                }
             } else if (cmd === '!الكلمات') {
-                const list = config.bannedWords.map((w,i)=>`${i+1}. ${w}`).join('\n');
+                const list = config.bannedWords.length
+                    ? config.bannedWords.map((w,i)=>`${i+1}. ${w}`).join('\n')
+                    : 'لا توجد كلمات ممنوعة حالياً';
                 await chat.sendMessage(`📋 *الكلمات الممنوعة:*\n\n${list}`);
             } else if (cmd === '!مساعدة') {
                 await chat.sendMessage(
@@ -202,7 +253,7 @@ client.on('message', async (msg) => {
             const adminCheck = isGroupAdmin(chat, senderId);
             console.log(`👮 منشن | senderId: ${senderId} | isAdmin: ${adminCheck}`);
 
-            if (!isOwner && !adminCheck) return; // تجاهل بصمت
+            if (!isOwner && !adminCheck) return;
 
             if (!msg.hasQuotedMsg) {
                 await chat.sendMessage('⚠️ ردّ على رسالة الشخص المراد طرده ثم منشن البوت.');
@@ -216,11 +267,13 @@ client.on('message', async (msg) => {
             const targetContact = await client.getContactById(targetId).catch(() => null);
             const targetName = targetContact?.pushname || targetId.replace('@c.us','') || 'مجهول';
 
-            // حذف رسالة المخالف
-            try { await quotedMsg.delete(true); } catch {}
-
-            // حذف رسالة الأدمن (المنشن)
-            try { await msg.delete(true); } catch {}
+            // ✅ حذف رسالة المخالف (المقتبسة) فقط — ليس رسالة الأدمن
+            try {
+                await quotedMsg.delete(true);
+                console.log(`🗑️ تم حذف رسالة المخالف`);
+            } catch (e) {
+                console.log(`⚠️ فشل حذف رسالة المخالف: ${e.message}`);
+            }
 
             // إرسال رسالة خاصة للمطرود
             try { await client.sendMessage(targetId, config.messages.privateWarning); } catch {}
@@ -228,11 +281,15 @@ client.on('message', async (msg) => {
             await new Promise(r => setTimeout(r, 500));
 
             // طرد العضو
-            await chat.removeParticipants([targetId]);
+            try {
+                await chat.removeParticipants([targetId]);
+                console.log(`✅ طرد يدوي: ${targetName}`);
+            } catch (e) {
+                console.log(`⚠️ فشل الطرد: ${e.message}`);
+            }
 
             // رسالة القروب
             await chat.sendMessage(`🚫 تم طرد *${targetName}* من قبل الإدارة`);
-            console.log(`✅ طرد يدوي: ${targetName}`);
             return;
         }
 
