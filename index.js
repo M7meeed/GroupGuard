@@ -183,8 +183,8 @@ client.on('message', async (msg) => {
             const targetContact = await client.getContactById(targetId);
             const targetName = targetContact.pushname || targetId.replace('@c.us','') || 'مجهول';
 
+            // حذف رسالة المخالف فقط
             try { await quotedMsg.delete(true); } catch {}
-            try { await msg.delete(true); } catch {}
 
             await kickMember(chat, targetId, 'منشن الأدمن', null);
             await chat.sendMessage(`🚫 تم طرد *${targetName}* من قبل الإدارة`);
