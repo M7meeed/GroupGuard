@@ -77,6 +77,18 @@ function checkMessage(text) {
     return null;
 }
 
+// ===== فحص إذا المرسل أدمن =====
+function isGroupAdmin(chat, senderId) {
+    const participants = chat.participants || [];
+    const sender = participants.find(p =>
+        p.id._serialized === senderId ||
+        p.id.user === senderId.replace('@c.us','').replace('@lid','')
+    );
+    // إذا ما لقيناه في القائمة (بسبب @lid) نرجع false — أمان أكثر
+    if (!sender) return false;
+    return sender.isAdmin || sender.isSuperAdmin;
+}
+
 // ===== الدالة الرئيسية للطرد =====
 async function kickMember(chat, targetId, reason, groupMsg = config.messages.groupNotice) {
     try {
@@ -96,9 +108,7 @@ client.on('group_join', async (notification) => {
             if (id === client.info.wid._serialized) continue;
 
             let number = '';
-
             if (id.endsWith('@lid')) {
-                // صيغة @lid — نحاول نجيب الرقم من المشاركين
                 try {
                     const contact = await client.getContactById(id);
                     number = contact.number || '';
@@ -114,11 +124,9 @@ client.on('group_join', async (notification) => {
 
             const isAllowed = config.allowedCountryCodes.some(code => number.startsWith(code));
             if (!isAllowed) {
-                console.log(`🌍 طرد دولة غير مسموحة: ${number} (${id})`);
+                console.log(`🌍 طرد دولة غير مسموحة: ${number}`);
                 await chat.removeParticipants([id]);
                 await chat.sendMessage('🚫 تم طرد عضو غير مؤهل');
-            } else {
-                console.log(`✅ دولة مسموحة: ${number}`);
             }
         }
     } catch (err) {
@@ -126,7 +134,7 @@ client.on('group_join', async (notification) => {
     }
 });
 
-// ===== معالج موحّد لجميع الرسائل =====
+// ===== معالج الرسائل =====
 client.on('message', async (msg) => {
     try {
         const chat = await msg.getChat();
@@ -140,36 +148,23 @@ client.on('message', async (msg) => {
         const senderId = msg.author || msg.from;
         const text = msg.body || '';
 
-        // ===== تشخيص =====
-        console.log(`📨 رسالة | من: ${senderId} | نص: "${text.substring(0,50)}" | ردّ: ${msg.hasQuotedMsg}`);
-
-        // ===== فحص المنشن =====
-        const botId = client.info.wid._serialized; // مثال: 249125058815@c.us
-        const botNumber = client.info.wid.user;     // مثال: 249125058815
+        // ===== فحص المنشن — للأدمن فقط =====
+        const botNumber = client.info.wid.user;
         const mentionedIds = (msg._data && msg._data.mentionedJidList) || [];
-
-        // نفحص إذا المنشن يحتوي رقم البوت بأي صيغة
         const botMentioned = mentionedIds.length > 0 && (
             mentionedIds.some(id => id.includes(botNumber)) ||
-            mentionedIds.some(id => id.replace('@lid','').replace('@c.us','') === botNumber) ||
-            mentionedIds.length === 1  // إذا في منشن واحد فقط في رسالة الأدمن نفترض أنه البوت
+            mentionedIds.length === 1
         );
 
-        console.log(`🤖 botId: ${botId} | botNumber: ${botNumber} | mentions: ${JSON.stringify(mentionedIds)} | botMentioned: ${botMentioned}`);
-
         if (botMentioned) {
-            // تحقق أن المرسل أدمن — نحدّث بيانات المجموعة أولاً
-            const participants = chat.participants || [];
-            const sender = participants.find(p =>
-                p.id._serialized === senderId ||
-                p.id.user === senderId.replace('@c.us','').replace('@lid','')
-            );
-            const isAdmin = !sender || sender.isAdmin || sender.isSuperAdmin;
-            // إذا ما لقينا المرسل في القائمة نفترض أنه أدمن (تجنباً لمشكلة @lid)
+            // ✅ تحقق صارم أن المرسل أدمن فقط
+            const adminCheck = isGroupAdmin(chat, senderId);
+            console.log(`👮 منشن | senderId: ${senderId} | isAdmin: ${adminCheck}`);
 
-            console.log(`👮 senderId: ${senderId} | sender: ${JSON.stringify(sender?.id)} | isAdmin: ${isAdmin}`);
-
-            if (!isAdmin) return;
+            if (!adminCheck) {
+                // ليس أدمن — تجاهل بصمت
+                return;
+            }
 
             if (!msg.hasQuotedMsg) {
                 await chat.sendMessage('⚠️ ردّ على رسالة الشخص المراد طرده ثم منشن البوت.');
@@ -183,7 +178,7 @@ client.on('message', async (msg) => {
             const targetContact = await client.getContactById(targetId);
             const targetName = targetContact.pushname || targetId.replace('@c.us','') || 'مجهول';
 
-            // حذف رسالة المخالف فقط
+            // ✅ حذف رسالة المخالف (الرسالة المردود عليها)
             try { await quotedMsg.delete(true); } catch {}
 
             await kickMember(chat, targetId, 'منشن الأدمن', null);
@@ -191,7 +186,7 @@ client.on('message', async (msg) => {
             return;
         }
 
-        // ===== فحص المخالفات =====
+        // ===== فحص المخالفات التلقائية =====
         if (senderId === client.info.wid._serialized) return;
 
         const violation = checkMessage(text);
@@ -202,7 +197,6 @@ client.on('message', async (msg) => {
         const number = senderId.replace('@c.us', '');
 
         console.log(`🚨 مخالفة من ${name}: ${violation}`);
-
         await msg.delete(true);
         await notifyAdmin(name, number, chat.name || '', text);
         await kickMember(chat, senderId, violation);
@@ -218,20 +212,22 @@ client.on('message', async (msg) => {
         const chat = await msg.getChat();
         if (!chat.isGroup) return;
 
-        const senderId = msg.author || msg.from;
-        const isOwner = senderId === client.info.wid._serialized;
-        const participants = chat.participants;
-        const sender = participants.find(p => p.id._serialized === senderId);
-        const isAdmin = sender && (sender.isAdmin || sender.isSuperAdmin);
-        if (!isOwner && !isAdmin) return;
-
-        const text = msg.body.trim();
+        const text = (msg.body || '').trim();
         if (!text.startsWith('!')) return;
+
+        const senderId = msg.author || msg.from;
+
+        // ✅ تحقق أن المرسل أدمن أو صاحب البوت
+        const isOwner = senderId === client.info.wid._serialized;
+        const adminCheck = isGroupAdmin(chat, senderId);
+        if (!isOwner && !adminCheck) return;
 
         const cmdId = msg.id._serialized + '_cmd';
         if (processingMessages.has(cmdId)) return;
         processingMessages.add(cmdId);
         setTimeout(() => processingMessages.delete(cmdId), 5000);
+
+        console.log(`⚙️ أمر من أدمن: "${text}"`);
 
         if (text.startsWith('!اضف دولة ')) {
             const code = text.replace('!اضف دولة ','').trim();
@@ -258,16 +254,17 @@ client.on('message', async (msg) => {
             if (i > -1) { config.bannedWords.splice(i,1); await chat.sendMessage(`🗑️ تم حذف الكلمة: "${word}"`); }
             else await chat.sendMessage(`⚠️ الكلمة غير موجودة`);
         } else if (text === '!الكلمات') {
-            await chat.sendMessage(`📋 *الكلمات الممنوعة:*\n\n${config.bannedWords.map((w,i)=>`${i+1}. ${w}`).join('\n')}`);
+            const list = config.bannedWords.map((w,i)=>`${i+1}. ${w}`).join('\n');
+            await chat.sendMessage(`📋 *الكلمات الممنوعة:*\n\n${list}`);
         } else if (text === '!مساعدة') {
             await chat.sendMessage(
                 `🤖 *أوامر البوت:*\n\n` +
                 `!اضف [كلمة] — إضافة كلمة ممنوعة\n` +
                 `!احذف [كلمة] — حذف كلمة ممنوعة\n` +
                 `!الكلمات — عرض الكلمات\n` +
-                `!اضف دولة [كود]\n` +
+                `!اضف دولة [كود] — مثال: !اضف دولة 971\n` +
                 `!احذف دولة [كود]\n` +
-                `!الدول — عرض الدول\n` +
+                `!الدول — عرض الدول المسموحة\n` +
                 `!مساعدة — هذه القائمة`
             );
         }
