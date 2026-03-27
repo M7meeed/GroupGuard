@@ -77,27 +77,19 @@ function checkMessage(text) {
     return null;
 }
 
-// ===== فحص إذا المرسل أدمن =====
+// ===== فحص إذا المرسل أدمن — يدعم @lid و @c.us =====
 function isGroupAdmin(chat, senderId) {
     const participants = chat.participants || [];
-    const sender = participants.find(p =>
-        p.id._serialized === senderId ||
-        p.id.user === senderId.replace('@c.us','').replace('@lid','')
-    );
-    // إذا ما لقيناه في القائمة (بسبب @lid) نرجع false — أمان أكثر
-    if (!sender) return false;
-    return sender.isAdmin || sender.isSuperAdmin;
-}
-
-// ===== الدالة الرئيسية للطرد =====
-async function kickMember(chat, targetId, reason, groupMsg = config.messages.groupNotice) {
-    try {
-        await client.sendMessage(targetId, config.messages.privateWarning);
-    } catch {}
-    await new Promise(r => setTimeout(r, 500));
-    await chat.removeParticipants([targetId]);
-    if (groupMsg) await chat.sendMessage(groupMsg);
-    console.log(`✅ تم طرد ${targetId} | السبب: ${reason}`);
+    // استخرج الرقم فقط بدون النطاق
+    const senderUser = senderId.replace('@c.us','').replace('@lid','').replace('@s.whatsapp.net','');
+    for (const p of participants) {
+        const pUser = p.id.user || '';
+        // مطابقة برقم المستخدم بدون النطاق
+        if (pUser === senderUser) {
+            return p.isAdmin || p.isSuperAdmin || false;
+        }
+    }
+    return false;
 }
 
 // ===== فحص الدولة عند الدخول =====
@@ -126,7 +118,6 @@ client.on('group_join', async (notification) => {
             if (!isAllowed) {
                 console.log(`🌍 طرد دولة غير مسموحة: ${number}`);
                 await chat.removeParticipants([id]);
-                await chat.sendMessage('🚫 تم طرد عضو غير مؤهل');
             }
         }
     } catch (err) {
@@ -134,7 +125,7 @@ client.on('group_join', async (notification) => {
     }
 });
 
-// ===== معالج الرسائل =====
+// ===== معالج رسائل المجموعة =====
 client.on('message', async (msg) => {
     try {
         const chat = await msg.getChat();
@@ -147,24 +138,71 @@ client.on('message', async (msg) => {
 
         const senderId = msg.author || msg.from;
         const text = msg.body || '';
-
-        // ===== فحص المنشن — للأدمن فقط =====
         const botNumber = client.info.wid.user;
+
+        // ===== أوامر ! =====
+        if (text.trim().startsWith('!')) {
+            const isOwner = msg.fromMe;
+            const adminCheck = isGroupAdmin(chat, senderId);
+            if (!isOwner && !adminCheck) return;
+
+            const cmd = text.trim();
+            console.log(`⚙️ أمر: "${cmd}"`);
+
+            if (cmd.startsWith('!اضف دولة ')) {
+                const code = cmd.replace('!اضف دولة ','').trim();
+                if (code && !config.allowedCountryCodes.includes(code)) {
+                    config.allowedCountryCodes.push(code);
+                    await chat.sendMessage(`✅ تمت إضافة الدولة: +${code}`);
+                }
+            } else if (cmd.startsWith('!احذف دولة ')) {
+                const code = cmd.replace('!احذف دولة ','').trim();
+                const i = config.allowedCountryCodes.indexOf(code);
+                if (i > -1) { config.allowedCountryCodes.splice(i,1); await chat.sendMessage(`🗑️ تم حذف الدولة: +${code}`); }
+                else await chat.sendMessage(`⚠️ الكود غير موجود`);
+            } else if (cmd === '!الدول') {
+                await chat.sendMessage(`🌍 *الدول المسموحة:*\n\n${config.allowedCountryCodes.map((c,i)=>`${i+1}. +${c}`).join('\n')}`);
+            } else if (cmd.startsWith('!اضف ')) {
+                const word = cmd.replace('!اضف ','').trim();
+                if (word && !config.bannedWords.includes(word)) {
+                    config.bannedWords.push(word);
+                    await chat.sendMessage(`✅ تمت إضافة الكلمة: "${word}"`);
+                }
+            } else if (cmd.startsWith('!احذف ')) {
+                const word = cmd.replace('!احذف ','').trim();
+                const i = config.bannedWords.indexOf(word);
+                if (i > -1) { config.bannedWords.splice(i,1); await chat.sendMessage(`🗑️ تم حذف الكلمة: "${word}"`); }
+                else await chat.sendMessage(`⚠️ الكلمة غير موجودة`);
+            } else if (cmd === '!الكلمات') {
+                const list = config.bannedWords.map((w,i)=>`${i+1}. ${w}`).join('\n');
+                await chat.sendMessage(`📋 *الكلمات الممنوعة:*\n\n${list}`);
+            } else if (cmd === '!مساعدة') {
+                await chat.sendMessage(
+                    `🤖 *أوامر البوت:*\n\n` +
+                    `!اضف [كلمة] — إضافة كلمة ممنوعة\n` +
+                    `!احذف [كلمة] — حذف كلمة ممنوعة\n` +
+                    `!الكلمات — عرض الكلمات\n` +
+                    `!اضف دولة [كود] — مثال: !اضف دولة 971\n` +
+                    `!احذف دولة [كود]\n` +
+                    `!الدول — عرض الدول المسموحة\n` +
+                    `!مساعدة — هذه القائمة`
+                );
+            }
+            return;
+        }
+
+        // ===== فحص المنشن — طرد يدوي من الأدمن =====
         const mentionedIds = (msg._data && msg._data.mentionedJidList) || [];
-        const botMentioned = mentionedIds.length > 0 && (
-            mentionedIds.some(id => id.includes(botNumber)) ||
-            mentionedIds.length === 1
+        const botMentioned = mentionedIds.some(id =>
+            id.replace('@c.us','').replace('@s.whatsapp.net','') === botNumber
         );
 
         if (botMentioned) {
-            // ✅ تحقق صارم أن المرسل أدمن فقط
+            const isOwner = msg.fromMe;
             const adminCheck = isGroupAdmin(chat, senderId);
             console.log(`👮 منشن | senderId: ${senderId} | isAdmin: ${adminCheck}`);
 
-            if (!adminCheck) {
-                // ليس أدمن — تجاهل بصمت
-                return;
-            }
+            if (!isOwner && !adminCheck) return; // تجاهل بصمت
 
             if (!msg.hasQuotedMsg) {
                 await chat.sendMessage('⚠️ ردّ على رسالة الشخص المراد طرده ثم منشن البوت.');
@@ -173,103 +211,65 @@ client.on('message', async (msg) => {
 
             const quotedMsg = await msg.getQuotedMessage();
             const targetId = quotedMsg.author || quotedMsg.from;
-            if (targetId === client.info.wid._serialized) return;
+            if (!targetId || targetId === client.info.wid._serialized) return;
 
-            const targetContact = await client.getContactById(targetId);
-            const targetName = targetContact.pushname || targetId.replace('@c.us','') || 'مجهول';
+            const targetContact = await client.getContactById(targetId).catch(() => null);
+            const targetName = targetContact?.pushname || targetId.replace('@c.us','') || 'مجهول';
 
-            // ✅ حذف رسالة المخالف (الرسالة المردود عليها)
+            // حذف رسالة المخالف
             try { await quotedMsg.delete(true); } catch {}
 
-            await kickMember(chat, targetId, 'منشن الأدمن', null);
+            // حذف رسالة الأدمن (المنشن)
+            try { await msg.delete(true); } catch {}
+
+            // إرسال رسالة خاصة للمطرود
+            try { await client.sendMessage(targetId, config.messages.privateWarning); } catch {}
+
+            await new Promise(r => setTimeout(r, 500));
+
+            // طرد العضو
+            await chat.removeParticipants([targetId]);
+
+            // رسالة القروب
             await chat.sendMessage(`🚫 تم طرد *${targetName}* من قبل الإدارة`);
+            console.log(`✅ طرد يدوي: ${targetName}`);
             return;
         }
 
         // ===== فحص المخالفات التلقائية =====
-        if (senderId === client.info.wid._serialized) return;
+        if (msg.fromMe) return;
 
         const violation = checkMessage(text);
         if (!violation) return;
 
         const contact = await msg.getContact();
         const name = contact.pushname || contact.number || 'مجهول';
-        const number = senderId.replace('@c.us', '');
+        const number = senderId.replace('@c.us','').replace('@lid','');
 
         console.log(`🚨 مخالفة من ${name}: ${violation}`);
-        await msg.delete(true);
+
+        // حذف الرسالة
+        try { await msg.delete(true); } catch {}
+
+        // إشعار الأدمن
         await notifyAdmin(name, number, chat.name || '', text);
-        await kickMember(chat, senderId, violation);
+
+        // رسالة خاصة للمخالف
+        try { await client.sendMessage(senderId, config.messages.privateWarning); } catch {}
+
+        await new Promise(r => setTimeout(r, 500));
+
+        // طرد العضو
+        try {
+            await chat.removeParticipants([senderId]);
+            await chat.sendMessage(config.messages.groupNotice);
+            console.log(`✅ تم طرد ${name}`);
+        } catch (kickErr) {
+            console.error(`❌ فشل الطرد:`, kickErr.message);
+        }
 
     } catch (err) {
         console.error('❌ خطأ:', err.message);
-    }
-});
-
-// ===== أوامر الأدمن =====
-client.on('message', async (msg) => {
-    try {
-        const chat = await msg.getChat();
-        if (!chat.isGroup) return;
-
-        const text = (msg.body || '').trim();
-        if (!text.startsWith('!')) return;
-
-        const senderId = msg.author || msg.from;
-
-        // ✅ تحقق أن المرسل أدمن أو صاحب البوت
-        const isOwner = senderId === client.info.wid._serialized;
-        const adminCheck = isGroupAdmin(chat, senderId);
-        if (!isOwner && !adminCheck) return;
-
-        const cmdId = msg.id._serialized + '_cmd';
-        if (processingMessages.has(cmdId)) return;
-        processingMessages.add(cmdId);
-        setTimeout(() => processingMessages.delete(cmdId), 5000);
-
-        console.log(`⚙️ أمر من أدمن: "${text}"`);
-
-        if (text.startsWith('!اضف دولة ')) {
-            const code = text.replace('!اضف دولة ','').trim();
-            if (code && !config.allowedCountryCodes.includes(code)) {
-                config.allowedCountryCodes.push(code);
-                await chat.sendMessage(`✅ تمت إضافة الدولة: +${code}`);
-            }
-        } else if (text.startsWith('!احذف دولة ')) {
-            const code = text.replace('!احذف دولة ','').trim();
-            const i = config.allowedCountryCodes.indexOf(code);
-            if (i > -1) { config.allowedCountryCodes.splice(i,1); await chat.sendMessage(`🗑️ تم حذف الدولة: +${code}`); }
-            else await chat.sendMessage(`⚠️ الكود غير موجود`);
-        } else if (text === '!الدول') {
-            await chat.sendMessage(`🌍 *الدول المسموحة:*\n\n${config.allowedCountryCodes.map((c,i)=>`${i+1}. +${c}`).join('\n')}`);
-        } else if (text.startsWith('!اضف ')) {
-            const word = text.replace('!اضف ','').trim();
-            if (word && !config.bannedWords.includes(word)) {
-                config.bannedWords.push(word);
-                await chat.sendMessage(`✅ تمت إضافة الكلمة: "${word}"`);
-            }
-        } else if (text.startsWith('!احذف ')) {
-            const word = text.replace('!احذف ','').trim();
-            const i = config.bannedWords.indexOf(word);
-            if (i > -1) { config.bannedWords.splice(i,1); await chat.sendMessage(`🗑️ تم حذف الكلمة: "${word}"`); }
-            else await chat.sendMessage(`⚠️ الكلمة غير موجودة`);
-        } else if (text === '!الكلمات') {
-            const list = config.bannedWords.map((w,i)=>`${i+1}. ${w}`).join('\n');
-            await chat.sendMessage(`📋 *الكلمات الممنوعة:*\n\n${list}`);
-        } else if (text === '!مساعدة') {
-            await chat.sendMessage(
-                `🤖 *أوامر البوت:*\n\n` +
-                `!اضف [كلمة] — إضافة كلمة ممنوعة\n` +
-                `!احذف [كلمة] — حذف كلمة ممنوعة\n` +
-                `!الكلمات — عرض الكلمات\n` +
-                `!اضف دولة [كود] — مثال: !اضف دولة 971\n` +
-                `!احذف دولة [كود]\n` +
-                `!الدول — عرض الدول المسموحة\n` +
-                `!مساعدة — هذه القائمة`
-            );
-        }
-    } catch (err) {
-        console.error('❌ خطأ أمر:', err.message);
     }
 });
 
